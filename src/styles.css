@@ -162,7 +162,7 @@ button { cursor: pointer; }
 .live ul { list-style: none; margin: 4px 0 0; padding: 0; }
 .live li.mine { font-weight: 600; }
 
-.credits { font-size: 0.7rem; color: var(--muted); padding: 6px 12px 8px; border-top: 1px solid var(--border); }
+.credits { font-size: 0.7rem; color: var(--muted); padding: 14px 4px 4px; text-align: center; }
 
 /* Mapa */
 .pin {

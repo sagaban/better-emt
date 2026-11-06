@@ -244,11 +244,10 @@ export default function App() {
           ) : (
             <Itineraries itineraries={plan.data} selected={selected} onSelect={setSelected} />
           )}
+          <footer className="credits">
+            Datos: EMT València · Mapa: OpenFreeMap, © OpenStreetMap. App no oficial.
+          </footer>
         </div>
-
-        <footer className="credits">
-          Datos: EMT València · Mapa: OpenFreeMap, © OpenStreetMap. App no oficial.
-        </footer>
       </section>
     </div>
   )
