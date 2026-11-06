@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e8264b"/>
+      <stop offset="1" stop-color="#a8082a"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd2da"/>
+      <stop offset="1" stop-color="#ffb3c1"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- Bus de frente -->
+  <g transform="translate(0 14)">
+    <rect x="132" y="112" width="216" height="256" rx="44" fill="#fff"/>
+    <!-- letrero de línea -->
+    <rect x="176" y="132" width="128" height="26" rx="13" fill="#c60c30"/>
+    <!-- parabrisas -->
+    <rect x="156" y="174" width="168" height="98" rx="18" fill="url(#glass)"/>
+    <path d="M156 236 L324 196 L324 222 L156 262 Z" fill="#fff" opacity=".35"/>
+    <!-- faros -->
+    <circle cx="182" cy="320" r="18" fill="#ffc83d"/>
+    <circle cx="298" cy="320" r="18" fill="#ffc83d"/>
+    <rect x="216" y="312" width="48" height="16" rx="8" fill="#e3e6ea"/>
+    <!-- ruedas -->
+    <rect x="152" y="364" width="52" height="38" rx="12" fill="#2a2d34"/>
+    <rect x="276" y="364" width="52" height="38" rx="12" fill="#2a2d34"/>
+    <!-- retrovisores -->
+    <rect x="110" y="182" width="18" height="52" rx="9" fill="#fff"/>
+    <rect x="352" y="182" width="18" height="52" rx="9" fill="#fff"/>
+  </g>
+
+  <!-- Pin de ubicación -->
+  <g transform="translate(330 64)">
+    <path d="M60 0C27 0 0 26 0 59c0 44 60 101 60 101s60-57 60-101C120 26 93 0 60 0z" fill="#ffc83d" stroke="#a8082a" stroke-width="10"/>
+    <circle cx="60" cy="58" r="22" fill="#a8082a"/>
+  </g>
+</svg>
