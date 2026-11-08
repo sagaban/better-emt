@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { MapView, type Target } from './components/MapView'
 import { PlaceInput } from './components/PlaceInput'
 import { Itineraries } from './components/Itineraries'
+import { FavoriteDialog, type FavoriteDraft } from './components/FavoriteDialog'
+import { findFavorite, useFavorites, type Favorite } from './lib/favorites'
 import { reverseGeocode } from './lib/geocode'
 import { fetchPlan, PlanError } from './lib/otp'
 import type { LngLat, Optimize, Place } from './lib/types'
@@ -43,6 +45,35 @@ export default function App() {
   const [selected, setSelected] = useState(0)
 
   const setters = { from: setFrom, to: setTo }
+
+  const favorites = useFavorites()
+  const [favDraft, setFavDraft] = useState<FavoriteDraft | null>(null)
+  const [editingFavs, setEditingFavs] = useState(false)
+
+  const placeFromFavorite = (f: Favorite): Place => ({ lat: f.lat, lon: f.lon, label: `${f.icon} ${f.name}`, source: 'favorite' })
+
+  /** Atajo: rellena el destino; si ya lo hay y falta el origen, el origen. */
+  const applyFavorite = (f: Favorite) => {
+    setPickTarget(null)
+    if (to && !from) setFrom(placeFromFavorite(f))
+    else setTo(placeFromFavorite(f))
+  }
+
+  const openFavoriteFor = (place: Place) => {
+    const existing = findFavorite(favorites, place)
+    if (existing) {
+      setFavDraft({ ...existing })
+      return
+    }
+    const address = place.source === 'gps' ? fmtCoords(place) : place.label
+    setFavDraft({ lat: place.lat, lon: place.lon, name: '', icon: '⭐', address })
+    // Para "Mi ubicación" buscar una dirección legible
+    if (place.source === 'gps') {
+      reverseGeocode(place).then((name) => {
+        if (name) setFavDraft((d) => (d && d.lat === place.lat && d.lon === place.lon ? { ...d, address: name } : d))
+      })
+    }
+  }
 
   /** Fija un punto y, en segundo plano, le pone nombre de calle. */
   const setPoint = useCallback((target: Target, p: LngLat, source: Place['source'], label?: string) => {
@@ -162,6 +193,16 @@ export default function App() {
         </div>
       )}
 
+      {favDraft && (
+        <FavoriteDialog
+          draft={favDraft}
+          onClose={() => {
+            setFavDraft(null)
+            setEditingFavs(false)
+          }}
+        />
+      )}
+
       <section className="panel">
         <header className="panel-header">
           <h1>
@@ -182,12 +223,44 @@ export default function App() {
                 onClear={() => setters[k](null)}
                 onUseLocation={() => locate(k)}
                 onPickOnMap={() => setPickTarget((t) => (t === k ? null : k))}
+                favorites={favorites}
+                favorite={findFavorite(favorites, k === 'from' ? from : to)}
+                onSelectFavorite={(f) => setters[k](placeFromFavorite(f))}
+                onFavoriteClick={() => {
+                  const v = k === 'from' ? from : to
+                  if (v) openFavoriteFor(v)
+                }}
               />
             ))}
             <button type="button" className="swap" onClick={swap} title="Intercambiar" aria-label="Intercambiar origen y destino">
               ⇅
             </button>
           </div>
+
+          {favorites.length > 0 ? (
+            <div className="fav-chips" role="list" aria-label="Favoritos">
+              {favorites.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="listitem"
+                  className={`chip ${editingFavs ? 'editing' : ''}`}
+                  title={editingFavs ? `Editar ${f.name}` : f.address}
+                  onClick={() => (editingFavs ? setFavDraft({ ...f }) : applyFavorite(f))}
+                >
+                  {f.icon} {f.name}
+                  {editingFavs && <span aria-hidden> ✎</span>}
+                </button>
+              ))}
+              <button type="button" className="link chip-edit" onClick={() => setEditingFavs((e) => !e)}>
+                {editingFavs ? 'Listo' : 'Editar'}
+              </button>
+            </div>
+          ) : (
+            (from || to) && (
+              <p className="fav-hint muted small">Consejo: pulsa ☆ en un lugar para guardarlo (Casa, Trabajo…).</p>
+            )
+          )}
 
           <div className="when">
             <select value={timeMode} onChange={(e) => setTimeMode(e.target.value as TimeMode)} aria-label="Cuándo">

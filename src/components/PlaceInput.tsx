@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { searchPlaces, type SearchResult } from '../lib/geocode'
+import type { Favorite } from '../lib/favorites'
 import type { Place } from '../lib/types'
 
 type Props = {
@@ -12,7 +13,14 @@ type Props = {
   onClear: () => void
   onUseLocation: () => void
   onPickOnMap: () => void
+  favorites: Favorite[]
+  /** Favorito que coincide con el valor actual */
+  favorite?: Favorite
+  onSelectFavorite: (f: Favorite) => void
+  onFavoriteClick: () => void
 }
+
+const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 
 function useDebounced<T>(value: T, ms: number) {
   const [v, setV] = useState(value)
@@ -23,7 +31,20 @@ function useDebounced<T>(value: T, ms: number) {
   return v
 }
 
-export function PlaceInput({ kind, value, picking, locating, onSelect, onClear, onUseLocation, onPickOnMap }: Props) {
+export function PlaceInput({
+  kind,
+  value,
+  picking,
+  locating,
+  onSelect,
+  onClear,
+  onUseLocation,
+  onPickOnMap,
+  favorites,
+  favorite,
+  onSelectFavorite,
+  onFavoriteClick,
+}: Props) {
   const [text, setText] = useState('')
   const [focused, setFocused] = useState(false)
   const q = useDebounced(text.trim(), 600)
@@ -40,6 +61,17 @@ export function PlaceInput({ kind, value, picking, locating, onSelect, onClear, 
     enabled: editing && q.length >= 3,
     staleTime: 5 * 60_000,
   })
+
+  const favMatches = !focused
+    ? []
+    : editing && text.trim()
+      ? favorites.filter((f) => norm(f.name).includes(norm(text.trim())))
+      : favorites
+  const showSearch = editing && q.length >= 3
+  const blur = () => {
+    setFocused(false)
+    ;(document.activeElement as HTMLElement | null)?.blur()
+  }
 
   const placeholder = kind === 'from' ? 'Origen: dirección, lugar…' : 'Destino: dirección, lugar…'
 
@@ -67,19 +99,36 @@ export function PlaceInput({ kind, value, picking, locating, onSelect, onClear, 
             }, 200)
           }
         />
-        {editing && q.length >= 3 && (
+        {(favMatches.length > 0 || showSearch) && (
           <ul className="suggestions" role="listbox">
-            {isFetching && !data && <li className="muted">Buscando…</li>}
-            {data?.length === 0 && <li className="muted">Sin resultados en València</li>}
-            {data?.map((r, i) => (
+            {favMatches.map((f) => (
+              <li key={f.id}>
+                <button
+                  type="button"
+                  className="suggestion-fav"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onSelectFavorite(f)
+                    blur()
+                  }}
+                >
+                  <strong>
+                    {f.icon} {f.name}
+                  </strong>
+                  <small>{f.address}</small>
+                </button>
+              </li>
+            ))}
+            {showSearch && isFetching && !data && <li className="muted">Buscando…</li>}
+            {showSearch && data?.length === 0 && <li className="muted">Sin resultados en València</li>}
+            {showSearch && data?.map((r, i) => (
               <li key={i}>
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     onSelect(r)
-                    setFocused(false)
-                    ;(document.activeElement as HTMLElement | null)?.blur()
+                    blur()
                   }}
                 >
                   <strong>{r.label}</strong>
@@ -90,6 +139,17 @@ export function PlaceInput({ kind, value, picking, locating, onSelect, onClear, 
           </ul>
         )}
       </div>
+      {value && !picking && (
+        <button
+          type="button"
+          className={`icon-btn star ${favorite ? 'on' : ''}`}
+          title={favorite ? `Favorito: ${favorite.name}` : 'Guardar como favorito'}
+          aria-label={favorite ? `Editar favorito ${favorite.name}` : 'Guardar como favorito'}
+          onClick={onFavoriteClick}
+        >
+          {favorite ? '★' : '☆'}
+        </button>
+      )}
       {value && !picking && (
         <button type="button" className="icon-btn" title="Borrar" aria-label="Borrar" onClick={onClear}>
           ✕

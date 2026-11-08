@@ -2,7 +2,7 @@ export type LngLat = { lat: number; lon: number }
 
 export type Place = LngLat & {
   label: string
-  source: 'gps' | 'map' | 'search'
+  source: 'gps' | 'map' | 'search' | 'favorite'
 }
 
 export type Stop = LngLat & { name: string; stopId?: string }
