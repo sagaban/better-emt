@@ -79,6 +79,7 @@ function Summary({ it }: { it: Itinerary }) {
   const rel = bus && relative(bus.start)
   return (
     <>
+      {it.label && <span className={`it-label ${it.label.includes('carril') ? 'lane' : ''}`}>{it.label}</span>}
       <div className="it-head">
         <span className="it-times">
           {fmtTime(it.start)} – {fmtTime(it.end)}

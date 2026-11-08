@@ -30,7 +30,7 @@ Todas aceptan CORS, así que la app es 100 % estática:
 | --- | --- |
 | Planificador (OpenTripPlanner de EMT) | `geoportal.emtvalencia.es/opentripplanner-api-webapp/ws/plan` |
 | Llegadas en tiempo real | `geoportal.emtvalencia.es/EMT/mapfunctions/MapUtilsPetitions.php?sec=getSAE&parada=ID` |
-| Rutas en bici | BRouter, perfil `safety` (`brouter.de`); si falla, el OTP de EMT en modo `BICYCLE` |
+| Rutas en bici | BRouter (`brouter.de`): perfil `safety` ("Equilibrada") y perfil propio `src/lib/brouter-carril.brf` ("Máximo carril bici"); si falla, el OTP de EMT en modo `BICYCLE` |
 | Red ciclista | Ajuntament de València, `geoportal.valencia.es/.../OPENDATA/Trafico/MapServer/189` |
 | Búsqueda de direcciones | Nominatim (OpenStreetMap) |
 | Mapa base | OpenFreeMap (estilo *liberty*) |

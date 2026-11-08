@@ -279,3 +279,8 @@ button { cursor: pointer; }
 .lane-legend summary::before { content: '▸ '; }
 .lane-legend[open] summary::before { content: '▾ '; }
 .lane-legend[open] summary { margin-bottom: 2px; }
+.it-label {
+  display: inline-block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--muted); margin-bottom: 2px;
+}
+.it-label.lane { color: #16a34a; }

@@ -42,6 +42,8 @@ export type Itinerary = {
   transfers: number
   /** Quién calculó la ruta (por defecto, el OTP de EMT) */
   source?: 'emt' | 'brouter'
+  /** Etiqueta de la variante (p. ej. "Máximo carril bici") */
+  label?: string
   legs: Leg[]
 }
 
