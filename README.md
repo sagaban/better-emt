@@ -5,6 +5,8 @@ PWA no oficial para planificar viajes en la EMT de València: dime de dónde sal
 - Origen/destino por **mi ubicación**, **punto en el mapa** (tocar o arrastrar los marcadores) o **búsqueda de dirección**.
 - Salir ahora / salir a las… / llegar a las…, preferir rapidez o menos transbordos, máximo a pie.
 - Detalle paso a paso, paradas intermedias y llegadas en tiempo real (cuando EMT las ofrece).
+- **Modo bici**: ruta que prioriza carriles bici, red ciclista municipal en el mapa y % del recorrido por carril.
+- Favoritos (Casa, Trabajo…) guardados en el dispositivo.
 
 ## Desarrollo
 
@@ -28,5 +30,7 @@ Todas aceptan CORS, así que la app es 100 % estática:
 | --- | --- |
 | Planificador (OpenTripPlanner de EMT) | `geoportal.emtvalencia.es/opentripplanner-api-webapp/ws/plan` |
 | Llegadas en tiempo real | `geoportal.emtvalencia.es/EMT/mapfunctions/MapUtilsPetitions.php?sec=getSAE&parada=ID` |
+| Rutas en bici | BRouter, perfil `safety` (`brouter.de`); si falla, el OTP de EMT en modo `BICYCLE` |
+| Red ciclista | Ajuntament de València, `geoportal.valencia.es/.../OPENDATA/Trafico/MapServer/189` |
 | Búsqueda de direcciones | Nominatim (OpenStreetMap) |
 | Mapa base | OpenFreeMap (estilo *liberty*) |

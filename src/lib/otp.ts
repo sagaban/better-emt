@@ -71,7 +71,7 @@ export async function fetchPlan(req: PlanRequest, signal?: AbortSignal): Promise
     `time=${pad(d.getHours())}:${pad(d.getMinutes())}`,
     `date=${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${yy}`,
     `dateEnglish=${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${yy}`,
-    'mode=BUSISH,WALK',
+    `mode=${req.mode === 'bike' ? 'BICYCLE' : 'BUSISH,WALK'}`,
     `arriveBy=${req.arriveBy}`,
     'wheelchair=false',
     `optimize=${req.optimize}`,

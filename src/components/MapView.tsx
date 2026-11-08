@@ -1,12 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import type { GeoJSONSource, Map as MLMap, MapMouseEvent, Marker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 // maplibre v6 resuelve el worker relativo a import.meta.url, lo que se rompe al empaquetar.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 
-maplibregl.setWorkerUrl(workerUrl)
+import { LANE_LEGEND, type BikeLanes } from '../lib/bikelanes'
 import type { Itinerary, LngLat, Place } from '../lib/types'
+
+maplibregl.setWorkerUrl(workerUrl)
 
 export type Target = 'from' | 'to'
 
@@ -17,7 +19,15 @@ type Props = {
   itinerary: Itinerary | null
   pickTarget: Target | null
   onPick: (target: Target, p: LngLat) => void
+  bikeLanes: BikeLanes | null
+  showBikeLanes: boolean
 }
+
+const BIKE_ON = '#16a34a'
+const BIKE_OFF = '#f97316'
+
+/** Clave estable de un itinerario para no reencuadrar si sólo cambian sus anotaciones. */
+const itineraryKey = (it: Itinerary) => `${it.start.getTime()}|${it.legs.map((l) => `${l.mode}${l.route ?? ''}${l.geometry.length}`).join(',')}`
 
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 const VALENCIA: [number, number] = [-0.3763, 39.4699]
@@ -30,7 +40,7 @@ function pinElement(kind: Target) {
   return el
 }
 
-export function MapView({ from, to, userLocation, itinerary, pickTarget, onPick }: Props) {
+export function MapView({ from, to, userLocation, itinerary, pickTarget, onPick, bikeLanes, showBikeLanes }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MLMap | null>(null)
   const markers = useRef<Partial<Record<Target, Marker>>>({})
@@ -43,6 +53,8 @@ export function MapView({ from, to, userLocation, itinerary, pickTarget, onPick 
   const endpointsRef = useRef({ from, to })
   endpointsRef.current = { from, to }
   onPickRef.current = onPick
+  const lastFitKey = useRef<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
 
   // Inicializar mapa
   useEffect(() => {
@@ -57,12 +69,36 @@ export function MapView({ from, to, userLocation, itinerary, pickTarget, onPick 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
 
     map.on('load', () => {
+      // Red ciclista (debajo de la ruta)
+      map.addSource('bikelanes', { type: 'geojson', data: EMPTY })
+      const laneWidth = ['interpolate', ['linear'], ['zoom'], 12, 1.5, 16, 4] as maplibregl.ExpressionSpecification
+      map.addLayer({
+        id: 'bikelanes',
+        type: 'line',
+        source: 'bikelanes',
+        filter: ['!=', ['get', 'kind'], 'obras'],
+        layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
+        paint: {
+          'line-color': ['match', ['get', 'kind'], ...LANE_LEGEND.flatMap((l) => [l.kind, l.color]), '#2563eb'] as unknown as maplibregl.ExpressionSpecification,
+          'line-width': laneWidth,
+          'line-opacity': 0.5,
+        },
+      })
+      map.addLayer({
+        id: 'bikelanes-obras',
+        type: 'line',
+        source: 'bikelanes',
+        filter: ['==', ['get', 'kind'], 'obras'],
+        layout: { visibility: 'none' },
+        paint: { 'line-color': LANE_LEGEND.find((l) => l.kind === 'obras')!.color, 'line-width': laneWidth, 'line-dasharray': [2, 2] },
+      })
+
       map.addSource('route', { type: 'geojson', data: EMPTY })
       map.addLayer({
         id: 'route-casing',
         type: 'line',
         source: 'route',
-        filter: ['==', ['get', 'mode'], 'BUS'],
+        filter: ['in', ['get', 'mode'], ['literal', ['BUS', 'BICYCLE']]],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': '#fff', 'line-width': 9 },
       })
@@ -75,10 +111,18 @@ export function MapView({ from, to, userLocation, itinerary, pickTarget, onPick 
         paint: { 'line-color': ['get', 'color'], 'line-width': 5 },
       })
       map.addLayer({
+        id: 'route-bike',
+        type: 'line',
+        source: 'route',
+        filter: ['==', ['get', 'mode'], 'BICYCLE'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['case', ['==', ['get', 'onLane'], false], BIKE_OFF, BIKE_ON], 'line-width': 6 },
+      })
+      map.addLayer({
         id: 'route-walk',
         type: 'line',
         source: 'route',
-        filter: ['!=', ['get', 'mode'], 'BUS'],
+        filter: ['!', ['in', ['get', 'mode'], ['literal', ['BUS', 'BICYCLE']]]],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': '#555', 'line-width': 4, 'line-dasharray': [0.1, 2] },
       })
@@ -109,6 +153,7 @@ export function MapView({ from, to, userLocation, itinerary, pickTarget, onPick 
         },
         paint: { 'text-color': '#222', 'text-halo-color': '#fff', 'text-halo-width': 1.5 },
       })
+      setLoaded(true)
     })
 
     map.on('click', (e: MapMouseEvent) => {
@@ -195,6 +240,18 @@ export function MapView({ from, to, userLocation, itinerary, pickTarget, onPick 
     }
   }, [userLocation])
 
+  // Red ciclista: datos y visibilidad
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loaded) return
+    ;(map.getSource('bikelanes') as GeoJSONSource).setData(bikeLanes ?? EMPTY)
+  }, [bikeLanes, loaded])
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loaded) return
+    for (const id of ['bikelanes', 'bikelanes-obras']) map.setLayoutProperty(id, 'visibility', showBikeLanes ? 'visible' : 'none')
+  }, [showBikeLanes, loaded])
+
   // Dibujar itinerario seleccionado
   useEffect(() => {
     const map = mapRef.current
@@ -206,13 +263,22 @@ export function MapView({ from, to, userLocation, itinerary, pickTarget, onPick 
       if (!itinerary) {
         route.setData(EMPTY)
         stops.setData(EMPTY)
+        lastFitKey.current = null
         return
       }
       const lines: GeoJSON.Feature[] = []
       const points: GeoJSON.Feature[] = []
       for (const leg of itinerary.legs) {
         const color = leg.routeColor ?? '#c60c30'
-        if (leg.geometry.length > 1) {
+        if (leg.mode === 'BICYCLE' && leg.lanes) {
+          for (const run of leg.lanes.runs) {
+            lines.push({
+              type: 'Feature',
+              properties: { mode: leg.mode, onLane: run.onLane },
+              geometry: { type: 'LineString', coordinates: run.coords },
+            })
+          }
+        } else if (leg.geometry.length > 1) {
           lines.push({
             type: 'Feature',
             properties: { mode: leg.mode, color },
@@ -242,6 +308,10 @@ export function MapView({ from, to, userLocation, itinerary, pickTarget, onPick 
       route.setData({ type: 'FeatureCollection', features: lines })
       stops.setData({ type: 'FeatureCollection', features: points })
 
+      // Sólo reencuadrar si es otro itinerario (no al llegar la info de carriles)
+      const key = itineraryKey(itinerary)
+      if (key === lastFitKey.current) return
+      lastFitKey.current = key
       const bounds = new maplibregl.LngLatBounds()
       for (const f of lines) for (const c of (f.geometry as GeoJSON.LineString).coordinates) bounds.extend(c as [number, number])
       for (const p of [endpointsRef.current.from, endpointsRef.current.to]) if (p) bounds.extend([p.lon, p.lat])
@@ -257,9 +327,8 @@ export function MapView({ from, to, userLocation, itinerary, pickTarget, onPick 
         })
       }
     }
-    if (map.isStyleLoaded() && map.getSource('route')) draw()
-    else map.once('load', draw)
-  }, [itinerary])
+    if (loaded) draw()
+  }, [itinerary, loaded])
 
   return <div ref={containerRef} className="map" />
 }

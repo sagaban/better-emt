@@ -24,6 +24,44 @@ function WalkIcon() {
   )
 }
 
+function BikeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-label="En bici">
+      <path
+        fill="currentColor"
+        d="M15.5 5.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5 12a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 8.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7zm5.8-10.4 2.4-2.4.8.8A7 7 0 0 0 19 10.5v-2a5 5 0 0 1-3.6-1.5l-1.9-1.9A2 2 0 0 0 12 4.5a2 2 0 0 0-1.4.6L7.8 7.9a2 2 0 0 0 0 2.8L11 13v5h2v-6.2l-2.2-1.7zM19 12a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 8.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"
+      />
+    </svg>
+  )
+}
+
+const GENERIC_STREET = /^(path|way|footway|cycleway|bike path|track|service road|street transit link|bridleway|steps|unnamed.*)$/i
+
+function streetNames(leg: Leg) {
+  return [...new Set(leg.steps.map((s) => s.streetName?.trim()).filter((s) => s && !GENERIC_STREET.test(s)))]
+}
+
+function bikeShare(it: Itinerary) {
+  const bike = it.legs.filter((l) => l.mode === 'BICYCLE')
+  if (!bike.length || bike.some((l) => !l.lanes)) return null
+  const total = bike.reduce((a, l) => a + l.distance, 0)
+  return total ? bike.reduce((a, l) => a + l.distance * l.lanes!.share, 0) / total : 0
+}
+
+function LaneBar({ share }: { share: number }) {
+  const pct = Math.round(share * 100)
+  return (
+    <div className="lane-share" title={`${pct}% por carril bici`}>
+      <div className="lane-bar" aria-hidden>
+        <span style={{ width: `${pct}%` }} />
+      </div>
+      <span>
+        <strong>{pct}%</strong> por carril bici
+      </span>
+    </div>
+  )
+}
+
 function relative(d: Date) {
   const m = minutesFromNow(d)
   if (m < -1) return null
@@ -53,6 +91,11 @@ function Summary({ it }: { it: Itinerary }) {
             {i > 0 && <span className="chain-sep">›</span>}
             {l.mode === 'BUS' ? (
               <LineBadge leg={l} />
+            ) : l.mode === 'BICYCLE' ? (
+              <span className="walk bike">
+                <BikeIcon />
+                {Math.max(1, Math.round(l.durationMs / 60000))}
+              </span>
             ) : (
               <span className="walk">
                 <WalkIcon />
@@ -69,6 +112,13 @@ function Summary({ it }: { it: Itinerary }) {
           <strong>{fmtTime(bus.start)}</strong>
           {rel && <span className="rel"> · {rel}</span>}
         </p>
+      ) : it.legs.some((l) => l.mode === 'BICYCLE') ? (
+        <>
+          <p className="it-board">
+            En bici: <strong>{fmtDistance(it.legs.reduce((a, l) => a + (l.mode === 'BICYCLE' ? l.distance : 0), 0))}</strong>
+          </p>
+          {bikeShare(it) != null && <LaneBar share={bikeShare(it)!} />}
+        </>
       ) : (
         <p className="it-board">Mejor ir andando ({fmtDistance(it.walkDistance)})</p>
       )}
@@ -112,6 +162,23 @@ function LegDetail({ leg, isLast }: { leg: Leg; isLast: boolean }) {
   const [showStops, setShowStops] = useState(false)
   const [showLive, setShowLive] = useState(false)
 
+  if (leg.mode === 'BICYCLE') {
+    const dest = isLast ? 'tu destino' : leg.to.name
+    const names = streetNames(leg)
+    return (
+      <li className="step step-bike">
+        <div className="step-time">{fmtTime(leg.start)}</div>
+        <div className="step-body">
+          <div className="step-title">
+            <BikeIcon /> Pedalea {fmtDuration(leg.durationMs)} ({fmtDistance(leg.distance)}) hasta <strong>{dest}</strong>
+          </div>
+          {leg.lanes && <LaneBar share={leg.lanes.share} />}
+          {names.length > 0 && <div className="muted small">Por {names.join(', ')}</div>}
+        </div>
+      </li>
+    )
+  }
+
   if (leg.mode !== 'BUS') {
     const dest = isLast ? 'tu destino' : leg.to.name
     return (
@@ -123,7 +190,7 @@ function LegDetail({ leg, isLast }: { leg: Leg; isLast: boolean }) {
           </div>
           {leg.steps.length > 0 && (
             <div className="muted small">
-              Por {[...new Set(leg.steps.map((s) => s.streetName).filter((s) => s && !/^(path|way|street transit link)$/i.test(s)))].join(', ')}
+              Por {streetNames(leg).join(', ')}
             </div>
           )}
         </div>

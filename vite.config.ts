@@ -32,6 +32,15 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
+            // Red ciclista del Ajuntament (cambia poco)
+            urlPattern: /^https:\/\/geoportal\.valencia\.es\/server\/rest\/services\/OPENDATA\/Trafico\/MapServer\/189\/query/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'bike-lanes',
+              expiration: { maxEntries: 2, maxAgeSeconds: 60 * 60 * 24 * 14 },
+            },
+          },
+          {
             // Estilo, teselas, fuentes y sprites del mapa
             urlPattern: /^https:\/\/tiles\.openfreemap\.org\//,
             handler: 'StaleWhileRevalidate',

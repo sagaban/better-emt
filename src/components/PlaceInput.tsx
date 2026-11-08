@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { searchPlaces, type SearchResult } from '../lib/geocode'
 import type { Favorite } from '../lib/favorites'
@@ -53,6 +53,9 @@ export function PlaceInput({
   useEffect(() => {
     setText(value?.label ?? '')
   }, [value])
+  // El blur se resuelve con retraso: leer el valor más reciente, no el del render en que ocurrió
+  const valueRef = useRef(value)
+  valueRef.current = value
 
   const editing = focused && text !== (value?.label ?? '')
   const { data, isFetching } = useQuery({
@@ -95,7 +98,7 @@ export function PlaceInput({
             // retraso para permitir el click en un resultado
             setTimeout(() => {
               setFocused(false)
-              setText(value?.label ?? '')
+              setText(valueRef.current?.label ?? '')
             }, 200)
           }
         />

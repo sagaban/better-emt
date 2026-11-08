@@ -9,6 +9,10 @@ export type Stop = LngLat & { name: string; stopId?: string }
 
 export type WalkStep = { streetName: string; distance: number; absoluteDirection?: string; relativeDirection?: string }
 
+export type TravelMode = 'bus' | 'bike'
+
+export type LaneRun = { coords: [number, number][]; onLane: boolean }
+
 export type Leg = {
   mode: 'WALK' | 'BUS' | string
   route?: string
@@ -24,6 +28,8 @@ export type Leg = {
   geometry: [number, number][]
   intermediateStops: Stop[]
   steps: WalkStep[]
+  /** Sólo en tramos en bici, cuando la red ciclista está cargada */
+  lanes?: { runs: LaneRun[]; share: number }
 }
 
 export type Itinerary = {
@@ -34,12 +40,15 @@ export type Itinerary = {
   walkTimeMs: number
   waitingTimeMs: number
   transfers: number
+  /** Quién calculó la ruta (por defecto, el OTP de EMT) */
+  source?: 'emt' | 'brouter'
   legs: Leg[]
 }
 
 export type Optimize = 'QUICK' | 'TRANSFERS'
 
 export type PlanRequest = {
+  mode: TravelMode
   from: LngLat
   to: LngLat
   /** null = salir ahora */

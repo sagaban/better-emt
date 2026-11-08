@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { MapView, type Target } from './components/MapView'
 import { PlaceInput } from './components/PlaceInput'
@@ -7,9 +7,20 @@ import { FavoriteDialog, type FavoriteDraft } from './components/FavoriteDialog'
 import { findFavorite, useFavorites, type Favorite } from './lib/favorites'
 import { reverseGeocode } from './lib/geocode'
 import { fetchPlan, PlanError } from './lib/otp'
-import type { LngLat, Optimize, Place } from './lib/types'
+import { fetchBikeRoutes } from './lib/brouter'
+import { buildLaneIndex, fetchBikeLanes, LANE_LEGEND, splitByLanes } from './lib/bikelanes'
+import type { Itinerary, LngLat, Optimize, Place, TravelMode } from './lib/types'
 
 type TimeMode = 'now' | 'depart' | 'arrive'
+
+const MODE_KEY = 'better-emt:mode'
+function loadMode(): TravelMode {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'bike' ? 'bike' : 'bus'
+  } catch {
+    return 'bus'
+  }
+}
 
 const fmtCoords = (p: LngLat) => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`
 
@@ -37,6 +48,15 @@ export default function App() {
   const [userLocation, setUserLocation] = useState<LngLat | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  const [mode, setModeState] = useState<TravelMode>(loadMode)
+  const setMode = (m: TravelMode) => {
+    setModeState(m)
+    try {
+      localStorage.setItem(MODE_KEY, m)
+    } catch {
+      /* sin almacenamiento */
+    }
+  }
   const [timeMode, setTimeMode] = useState<TimeMode>('now')
   const [dateTime, setDateTime] = useState(() => toLocalInput(new Date()))
   const [optimize, setOptimize] = useState<Optimize>('QUICK')
@@ -146,18 +166,47 @@ export default function App() {
 
   const when = timeMode === 'now' ? null : new Date(dateTime)
   const plan = useQuery({
-    queryKey: ['plan', from?.lat, from?.lon, to?.lat, to?.lon, timeMode, timeMode === 'now' ? null : dateTime, optimize, maxWalk],
-    queryFn: ({ signal }) =>
-      fetchPlan({ from: from!, to: to!, when, arriveBy: timeMode === 'arrive', optimize, maxWalkDistance: maxWalk }, signal),
+    queryKey: ['plan', mode, from?.lat, from?.lon, to?.lat, to?.lon, timeMode, timeMode === 'now' ? null : dateTime, optimize, maxWalk],
+    queryFn: async ({ signal }) => {
+      const req = { mode, from: from!, to: to!, when, arriveBy: timeMode === 'arrive', optimize, maxWalkDistance: maxWalk }
+      if (mode === 'bike') {
+        // BRouter prioriza carriles bici; si falla, usamos el planificador de EMT
+        try {
+          return await fetchBikeRoutes(req.from, req.to, when, req.arriveBy, signal)
+        } catch (e) {
+          if (signal.aborted) throw e
+        }
+      }
+      return fetchPlan(req, signal)
+    },
     enabled: !!from && !!to,
     staleTime: timeMode === 'now' ? 60_000 : Infinity,
-    refetchInterval: timeMode === 'now' ? 60_000 : false,
+    refetchInterval: timeMode === 'now' && mode === 'bus' ? 60_000 : false,
     retry: (count, err) => !(err instanceof PlanError) && count < 2,
   })
 
+  // Red ciclista: sólo se descarga al usar el modo bici
+  const lanes = useQuery({
+    queryKey: ['bikelanes'],
+    queryFn: ({ signal }) => fetchBikeLanes(signal),
+    enabled: mode === 'bike',
+    staleTime: 24 * 60 * 60_000,
+    gcTime: Infinity,
+  })
+  const laneIndex = useMemo(() => (lanes.data ? buildLaneIndex(lanes.data) : null), [lanes.data])
+
+  /** Itinerarios con los tramos en bici partidos según vayan o no por carril bici. */
+  const itineraries = useMemo<Itinerary[] | undefined>(() => {
+    if (!plan.data || !laneIndex) return plan.data
+    return plan.data.map((it) => ({
+      ...it,
+      legs: it.legs.map((l) => (l.mode === 'BICYCLE' ? { ...l, lanes: splitByLanes(l.geometry, laneIndex) } : l)),
+    }))
+  }, [plan.data, laneIndex])
+
   useEffect(() => setSelected(0), [plan.data])
 
-  const itinerary = plan.data?.[selected] ?? null
+  const itinerary = itineraries?.[selected] ?? null
 
   const swap = () => {
     setFrom(to)
@@ -176,7 +225,28 @@ export default function App() {
           setPoint(target, p, 'map')
           setPickTarget(null)
         }}
+        bikeLanes={lanes.data ?? null}
+        showBikeLanes={mode === 'bike'}
       />
+
+      {mode === 'bike' && (
+        <details className="lane-legend" open={window.innerWidth >= 800}>
+          <summary>Leyenda</summary>
+          <div className="legend-row">
+            <i className="swatch route" style={{ background: '#16a34a' }} /> Tu ruta por carril
+          </div>
+          <div className="legend-row">
+            <i className="swatch route" style={{ background: '#f97316' }} /> Tu ruta sin carril
+          </div>
+          {LANE_LEGEND.map((l) => (
+            <div key={l.kind} className="legend-row">
+              <i className={`swatch ${l.kind === 'obras' ? 'dashed' : ''}`} style={{ background: l.color, color: l.color }} /> {l.label}
+            </div>
+          ))}
+          {lanes.isPending && <div className="legend-row muted">Cargando red ciclista…</div>}
+          {lanes.isError && <div className="legend-row muted">Red ciclista no disponible</div>}
+        </details>
+      )}
 
       {pickTarget && (
         <div className="pick-banner">
@@ -206,8 +276,28 @@ export default function App() {
       <section className="panel">
         <header className="panel-header">
           <h1>
-            <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="24" height="24" /> ¿Qué bus cojo?
+            <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="24" height="24" />{' '}
+            {mode === 'bike' ? '¿Por dónde voy?' : '¿Qué bus cojo?'}
           </h1>
+          <div className="mode-switch" role="radiogroup" aria-label="Medio de transporte">
+            {(
+              [
+                ['bus', '🚌', 'Bus'],
+                ['bike', '🚲', 'Bici'],
+              ] as const
+            ).map(([m, icon, label]) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={mode === m}
+                className={mode === m ? 'active' : ''}
+                onClick={() => setMode(m)}
+              >
+                {icon} {label}
+              </button>
+            ))}
+          </div>
         </header>
 
         <div className="form">
@@ -271,18 +361,21 @@ export default function App() {
             {timeMode !== 'now' && (
               <input type="datetime-local" value={dateTime} onChange={(e) => setDateTime(e.target.value)} aria-label="Fecha y hora" />
             )}
-            <button type="button" className="link" onClick={() => setShowOptions((s) => !s)}>
-              Opciones {showOptions ? '▲' : '▼'}
-            </button>
+            {mode === 'bus' && (
+              <button type="button" className="link" onClick={() => setShowOptions((s) => !s)}>
+                Opciones {showOptions ? '▲' : '▼'}
+              </button>
+            )}
           </div>
 
-          {showOptions && (
+          {mode === 'bus' && showOptions && (
             <div className="options">
               <label>
                 Preferir
                 <select value={optimize} onChange={(e) => setOptimize(e.target.value as Optimize)}>
-                  <option value="QUICK">Ruta más rápida</option>
-                  <option value="TRANSFERS">Menos transbordos</option>
+                  {/* Mismas etiquetas que el visor de EMT para su OTP */}
+                  <option value="TRANSFERS">Ruta más rápida</option>
+                  <option value="QUICK">Menos tiempo andando</option>
                 </select>
               </label>
               <label>
@@ -315,10 +408,10 @@ export default function App() {
               </button>
             </div>
           ) : (
-            <Itineraries itineraries={plan.data} selected={selected} onSelect={setSelected} />
+            <Itineraries itineraries={itineraries ?? plan.data} selected={selected} onSelect={setSelected} />
           )}
           <footer className="credits">
-            Datos: EMT València · Mapa: OpenFreeMap, © OpenStreetMap. App no oficial.
+            Datos: EMT València, Ajuntament de València · Rutas en bici: BRouter · Mapa: OpenFreeMap, © OpenStreetMap. App no oficial.
           </footer>
         </div>
       </section>
